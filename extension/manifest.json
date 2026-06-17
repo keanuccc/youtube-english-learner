@@ -5,6 +5,9 @@
   "description": "Extract YouTube subtitles into bilingual PDF for English learning",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["*://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "YouTube English Learner"
@@ -16,6 +19,5 @@
       "css": ["content/content.css"],
       "run_at": "document_idle"
     }
-  ],
-  "icons": {}
+  ]
 }

@@ -3,19 +3,7 @@
 (function () {
   "use strict";
 
-  const DEFAULT_API = "http://localhost:5000";
-  let API = DEFAULT_API;
-
   if (document.getElementById("yt-english-learner-btn")) return;
-
-  function loadApiUrl() {
-    return new Promise((resolve) => {
-      chrome.storage.sync.get(["apiUrl"], (result) => {
-        if (result.apiUrl) API = result.apiUrl;
-        resolve();
-      });
-    });
-  }
 
   // Create button with progress bar
   const btn = document.createElement("button");
@@ -41,7 +29,15 @@
     clearTimeout(doneTimer);
     btn.classList.remove("loading");
     bar.style.width = "0%";
+    btn.style.background = "";
     text.textContent = "Learn English";
+  }
+
+  // Send message to background script (avoids CORS issues)
+  function sendMessage(msg) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(msg, resolve);
+    });
   }
 
   btn.addEventListener("click", async () => {
@@ -50,9 +46,7 @@
     btn.classList.add("loading");
     setProgress(5, "Connecting...");
 
-    await loadApiUrl();
-
-    // Simulated progress stages (advance while waiting for response)
+    // Simulated progress stages
     const stages = [
       [15,  "Extracting subtitles...", 4000],
       [40,  "Translating...",          8000],
@@ -65,48 +59,34 @@
 
     try {
       // Health check
-      const health = await fetch(`${API}/api/health`);
+      const health = await sendMessage({ action: "health" });
       if (!health.ok) throw new Error("offline");
 
-      // Generate
-      const resp = await fetch(`${API}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
+      // Generate PDF
+      const result = await sendMessage({ action: "generate", url });
 
-      // Clear simulated stages
       timers.forEach(clearTimeout);
 
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        setProgress(100, data.error || "Failed");
+      if (!result.ok) {
+        setProgress(100, result.data?.error || "Failed");
         btn.style.background = "#dc2626";
-        doneTimer = setTimeout(() => {
-          btn.style.background = "";
-          resetBtn();
-        }, 3000);
+        doneTimer = setTimeout(resetBtn, 3000);
         return;
       }
 
-      // Success
+      // Success — show count and trigger download
+      const data = result.data;
       setProgress(100, `${data.pair_count} sentences`);
       btn.style.background = "#16a34a";
-      window.open(`${API}/api/download/${data.pdf}`, "_blank");
-      doneTimer = setTimeout(() => {
-        btn.style.background = "";
-        resetBtn();
-      }, 3000);
+
+      sendMessage({ action: "download", filename: data.pdf });
+      doneTimer = setTimeout(resetBtn, 3000);
 
     } catch (e) {
       timers.forEach(clearTimeout);
       setProgress(100, "Backend offline");
       btn.style.background = "#dc2626";
-      doneTimer = setTimeout(() => {
-        btn.style.background = "";
-        resetBtn();
-      }, 3000);
+      doneTimer = setTimeout(resetBtn, 3000);
     }
   });
 })();
