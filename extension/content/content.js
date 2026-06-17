@@ -5,7 +5,6 @@
 
   if (document.getElementById("yt-english-learner-btn")) return;
 
-  // Create button with progress bar
   const btn = document.createElement("button");
   btn.id = "yt-english-learner-btn";
   btn.innerHTML = `
@@ -33,10 +32,20 @@
     text.textContent = "Learn English";
   }
 
-  // Send message to background script (avoids CORS issues)
+  // Send message to background script via Promise
   function sendMessage(msg) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(msg, resolve);
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(msg, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 
@@ -46,7 +55,6 @@
     btn.classList.add("loading");
     setProgress(5, "Connecting...");
 
-    // Simulated progress stages
     const stages = [
       [15,  "Extracting subtitles...", 4000],
       [40,  "Translating...",          8000],
@@ -60,33 +68,36 @@
     try {
       // Health check
       const health = await sendMessage({ action: "health" });
-      if (!health.ok) throw new Error("offline");
+      if (!health || !health.ok) throw new Error("offline");
 
       // Generate PDF
       const result = await sendMessage({ action: "generate", url });
 
       timers.forEach(clearTimeout);
 
-      if (!result.ok) {
-        setProgress(100, result.data?.error || "Failed");
+      if (!result || !result.ok) {
+        const errMsg = result?.data?.error || "Generation failed";
+        setProgress(100, errMsg);
         btn.style.background = "#dc2626";
-        doneTimer = setTimeout(resetBtn, 3000);
+        doneTimer = setTimeout(resetBtn, 4000);
         return;
       }
 
-      // Success — show count and trigger download
+      // Success
       const data = result.data;
       setProgress(100, `${data.pair_count} sentences`);
       btn.style.background = "#16a34a";
 
-      sendMessage({ action: "download", filename: data.pdf });
+      // Trigger download via background script
+      sendMessage({ action: "download", filename: data.pdf }).catch(() => {});
       doneTimer = setTimeout(resetBtn, 3000);
 
     } catch (e) {
       timers.forEach(clearTimeout);
+      console.error("YT English Learner error:", e);
       setProgress(100, "Backend offline");
       btn.style.background = "#dc2626";
-      doneTimer = setTimeout(resetBtn, 3000);
+      doneTimer = setTimeout(resetBtn, 4000);
     }
   });
 })();
