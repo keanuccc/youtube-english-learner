@@ -1,890 +1,534 @@
 """
-YouTube Newsletter Dashboard
-A beautiful web interface to manage your newsletter.
+YouTube English Learning - Web Dashboard
+Beautiful, magazine-style interface for generating bilingual PDFs.
 """
 
 import streamlit as st
 import os
-import json
-import subprocess
-import re
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
 
-# Paths
-PROJECT_DIR = Path(__file__).parent
-CHANNELS_FILE = PROJECT_DIR / "get_videos.py"
-PROMPT_FILE = PROJECT_DIR / "write_articles.py"
-TRACKER_FILE = PROJECT_DIR / "processed_videos.json"
-NEWSLETTERS_DIR = PROJECT_DIR / "newsletters"
-PLIST_FILE = Path.home() / "Library/LaunchAgents/com.youtube.newsletter.plist"
+from get_transcripts import get_transcript
+from translate import translate_transcript
+from generate_pdf import generate_pdf
+from main import extract_video_id, get_video_info
 
-# Create newsletters directory if it doesn't exist
-NEWSLETTERS_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR = Path(__file__).parent / "output"
+OUTPUT_DIR.mkdir(exist_ok=True)
 
+# ========== Page Config ==========
 st.set_page_config(
-    page_title="The Digest",
-    page_icon="📰",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="YouTube English Learner",
+    page_icon="📚",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# ============================================
-# CUSTOM CSS - Editorial Magazine Aesthetic
-# ============================================
+# ========== Custom CSS ==========
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    :root {
-        --bg-primary: #0d0d0d;
-        --bg-secondary: #161616;
-        --bg-tertiary: #1a1a1a;
-        --bg-card: #1e1e1e;
-        --accent-gold: #d4a855;
-        --accent-gold-dim: #a68542;
-        --accent-gold-glow: rgba(212, 168, 85, 0.15);
-        --text-primary: #e8e4dd;
-        --text-secondary: #9a958c;
-        --text-dim: #5c5850;
-        --border-subtle: #2a2a2a;
-        --success: #5cb85c;
-        --error: #c9302c;
-    }
+/* ---------- Global ---------- */
+.stApp {
+    background: #f5f5f7;
+    font-family: 'Inter', -apple-system, sans-serif;
+}
 
-    /* Main container */
-    .stApp {
-        background: var(--bg-primary);
-        background-image:
-            radial-gradient(ellipse at top right, rgba(212, 168, 85, 0.03) 0%, transparent 50%),
-            radial-gradient(ellipse at bottom left, rgba(212, 168, 85, 0.02) 0%, transparent 50%);
-    }
+/* Hide Streamlit chrome */
+#MainMenu, footer, header {visibility: hidden;}
+[data-testid="stSidebar"] {display: none;}
 
-    /* Hide default streamlit elements */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+/* ---------- Main container ---------- */
+.block-container {
+    max-width: 720px !important;
+    padding-top: 3rem !important;
+    padding-bottom: 2rem;
+}
 
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: var(--bg-secondary);
-        border-right: 1px solid var(--border-subtle);
-    }
+/* ---------- Hero ---------- */
+.hero {
+    text-align: center;
+    padding: 2.5rem 0 1.5rem;
+}
+.hero-icon {
+    font-size: 3.2rem;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 0 16px rgba(234, 179, 8, 0.25));
+}
+.hero h1 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    font-size: 2.2rem;
+    color: #1a1a1a;
+    margin: 0;
+    letter-spacing: -0.03em;
+}
+.hero p {
+    color: #888;
+    font-size: 0.95rem;
+    margin-top: 0.5rem;
+    font-weight: 400;
+}
 
-    [data-testid="stSidebar"] .stRadio > label {
-        font-family: 'Sora', sans-serif;
-        font-size: 0.75rem;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--text-secondary);
-        margin-bottom: 1rem;
-    }
+/* ---------- Input card ---------- */
+.input-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 1.8rem;
+    margin: 1rem 0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
 
-    [data-testid="stSidebar"] .stRadio > div {
-        gap: 0.25rem;
-    }
+/* Style the text input */
+.stTextInput > div > div > input {
+    background: #f9fafb !important;
+    border: 1.5px solid #d1d5db !important;
+    border-radius: 12px !important;
+    padding: 0.85rem 1.1rem !important;
+    font-size: 0.95rem !important;
+    color: #1a1a1a !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    transition: border-color 0.2s ease;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #eab308 !important;
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.12) !important;
+    background: #ffffff !important;
+}
+.stTextInput > div > div > input::placeholder {
+    color: #b0b0b0 !important;
+}
 
-    [data-testid="stSidebar"] .stRadio > div > label {
-        font-family: 'Sora', sans-serif;
-        font-weight: 400;
-        font-size: 0.95rem;
-        color: var(--text-primary);
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        transition: all 0.2s ease;
-        border: 1px solid transparent;
-    }
+/* Generate button */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #eab308 0%, #d97706 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 1.5rem !important;
+    letter-spacing: 0.02em;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 12px rgba(234, 179, 8, 0.25);
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(234, 179, 8, 0.35) !important;
+}
 
-    [data-testid="stSidebar"] .stRadio > div > label:hover {
-        background: var(--bg-tertiary);
-        border-color: var(--border-subtle);
-    }
+/* ---------- Progress section ---------- */
+.progress-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.progress-title {
+    color: #374151;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
 
-    [data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] {
-        background: var(--accent-gold-glow);
-        border-color: var(--accent-gold-dim);
-        color: var(--accent-gold);
-    }
+/* Step indicators */
+.steps {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+.step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+.step-pending {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border: 1px solid #e5e7eb;
+}
+.step-active {
+    background: rgba(234, 179, 8, 0.1);
+    color: #b45309;
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    animation: pulse-glow 1.5s ease-in-out infinite;
+}
+.step-done {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
 
-    /* Typography */
-    h1, h2, h3 {
-        font-family: 'Cormorant Garamond', Georgia, serif !important;
-        color: var(--text-primary) !important;
-        font-weight: 600 !important;
-    }
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+    50% { box-shadow: 0 0 12px 2px rgba(234, 179, 8, 0.12); }
+}
 
-    h1 {
-        font-size: 2.75rem !important;
-        letter-spacing: -0.02em;
-        border-bottom: 1px solid var(--border-subtle);
-        padding-bottom: 1rem;
-        margin-bottom: 2rem !important;
-    }
+/* Spinner override */
+.stSpinner > div {
+    border-top-color: #eab308 !important;
+}
 
-    h2 {
-        font-size: 1.75rem !important;
-        color: var(--accent-gold) !important;
-        margin-top: 2rem !important;
-    }
+/* ---------- Result card ---------- */
+.result-card {
+    background: #ffffff;
+    border: 1px solid #d1fae5;
+    border-radius: 16px;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 2px 12px rgba(34, 197, 94, 0.08);
+    animation: fade-in 0.4s ease;
+}
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
-    h3 {
-        font-size: 1.25rem !important;
-        font-weight: 400 !important;
-        font-style: italic;
-    }
+.result-title {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: #1a1a1a;
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+}
+.result-channel {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-bottom: 1.2rem;
+}
 
-    p, li, span, div {
-        font-family: 'Sora', sans-serif;
-        color: var(--text-primary);
-    }
+/* Stats row */
+.stats-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.stat-box {
+    flex: 1;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+}
+.stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #d97706;
+}
+.stat-label {
+    font-size: 0.7rem;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 0.3rem;
+}
 
-    /* Cards */
-    [data-testid="stExpander"] {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        overflow: hidden;
-    }
+/* Download button */
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 1.5rem !important;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 12px rgba(34, 197, 94, 0.2);
+}
+.stDownloadButton > button:hover {
+    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3) !important;
+}
 
-    [data-testid="stExpander"] summary {
-        font-family: 'Sora', sans-serif;
-        font-weight: 500;
-    }
+/* ---------- History section ---------- */
+.history-header {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #6b7280;
+    margin: 2rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    letter-spacing: 0.02em;
+}
+.history-empty {
+    color: #c0c0c0;
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 2rem 0;
+}
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.75rem 1rem;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.history-item:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.history-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+.history-info {
+    flex: 1;
+    min-width: 0;
+}
+.history-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.history-meta {
+    font-size: 0.7rem;
+    color: #9ca3af;
+    margin-top: 0.15rem;
+}
 
-    /* Buttons */
-    .stButton > button {
-        font-family: 'Sora', sans-serif;
-        font-weight: 500;
-        font-size: 0.9rem;
-        letter-spacing: 0.03em;
-        border-radius: 8px;
-        padding: 0.6rem 1.5rem;
-        transition: all 0.3s ease;
-        border: 1px solid var(--border-subtle);
-        background: var(--bg-tertiary);
-        color: var(--text-primary);
-    }
+/* ---------- Divider ---------- */
+.divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5rem 0;
+}
 
-    .stButton > button:hover {
-        border-color: var(--accent-gold-dim);
-        background: var(--accent-gold-glow);
-        color: var(--accent-gold);
-        transform: translateY(-1px);
-    }
+/* ---------- Error card ---------- */
+.error-card {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    margin: 1rem 0;
+    color: #dc2626;
+    font-size: 0.9rem;
+}
 
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%);
-        color: var(--bg-primary);
-        border: none;
-        font-weight: 600;
-    }
-
-    .stButton > button[kind="primary"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(212, 168, 85, 0.25);
-    }
-
-    /* Inputs */
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.9rem;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        color: var(--text-primary);
-    }
-
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus {
-        border-color: var(--accent-gold-dim);
-        box-shadow: 0 0 0 2px var(--accent-gold-glow);
-    }
-
-    /* Selectbox styling */
-    .stSelectbox > div > div {
-        background: var(--bg-tertiary) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 8px !important;
-    }
-
-    .stSelectbox > div > div > div {
-        color: var(--text-primary) !important;
-        background: var(--bg-tertiary) !important;
-    }
-
-    .stSelectbox [data-baseweb="select"] {
-        background: var(--bg-tertiary) !important;
-    }
-
-    .stSelectbox [data-baseweb="select"] > div {
-        background: var(--bg-tertiary) !important;
-        color: var(--text-primary) !important;
-    }
-
-    /* Dropdown menu */
-    [data-baseweb="popover"] {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-subtle) !important;
-    }
-
-    [data-baseweb="popover"] li {
-        background: var(--bg-card) !important;
-        color: var(--text-primary) !important;
-    }
-
-    [data-baseweb="popover"] li:hover {
-        background: var(--bg-tertiary) !important;
-    }
-
-    [role="listbox"] {
-        background: var(--bg-card) !important;
-    }
-
-    [role="option"] {
-        color: var(--text-primary) !important;
-        background: var(--bg-card) !important;
-    }
-
-    [role="option"]:hover {
-        background: var(--accent-gold-glow) !important;
-    }
-
-    /* Metrics */
-    [data-testid="stMetric"] {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 1.5rem;
-    }
-
-    [data-testid="stMetric"] label {
-        font-family: 'Sora', sans-serif;
-        font-size: 0.75rem;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--text-secondary);
-    }
-
-    [data-testid="stMetric"] [data-testid="stMetricValue"] {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: var(--accent-gold);
-    }
-
-    /* Info boxes */
-    .stAlert {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        border-left: 3px solid var(--accent-gold);
-    }
-
-    /* Code blocks */
-    code {
-        font-family: 'JetBrains Mono', monospace;
-        background: var(--bg-tertiary);
-        padding: 0.2rem 0.4rem;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        color: var(--accent-gold);
-    }
-
-    /* Dividers */
-    hr {
-        border: none;
-        border-top: 1px solid var(--border-subtle);
-        margin: 2rem 0;
-    }
-
-    /* Channel item styling */
-    .channel-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .channel-name {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.95rem;
-        color: var(--text-primary);
-    }
-
-    /* Success/Error messages */
-    .stSuccess {
-        background: rgba(92, 184, 92, 0.15) !important;
-        border: 1px solid rgba(92, 184, 92, 0.4) !important;
-        border-left: 3px solid var(--success) !important;
-    }
-
-    .stError {
-        background: rgba(201, 48, 44, 0.15) !important;
-        border: 1px solid rgba(201, 48, 44, 0.4) !important;
-        border-left: 3px solid var(--error) !important;
-    }
-
-    .stWarning {
-        background: rgba(212, 168, 85, 0.15) !important;
-        border: 1px solid rgba(212, 168, 85, 0.4) !important;
-        border-left: 3px solid var(--accent-gold) !important;
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-        background: var(--bg-secondary);
-    }
-
-    ::-webkit-scrollbar-thumb {
-        background: var(--border-subtle);
-        border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-dim);
-    }
-
-    /* Logo/Title styling */
-    .masthead {
-        text-align: center;
-        padding: 1rem 0 2rem 0;
-        border-bottom: 2px solid var(--accent-gold);
-        margin-bottom: 2rem;
-    }
-
-    .masthead h1 {
-        font-family: 'Cormorant Garamond', serif !important;
-        font-size: 3.5rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: none !important;
-        background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-gold) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    .masthead .tagline {
-        font-family: 'Cormorant Garamond', serif;
-        font-style: italic;
-        font-size: 1.1rem;
-        color: var(--text-secondary);
-        margin-top: 0.5rem;
-    }
-
-    /* Newsletter card */
-    .newsletter-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        transition: all 0.2s ease;
-    }
-
-    .newsletter-card:hover {
-        border-color: var(--accent-gold-dim);
-    }
-
-    .newsletter-date {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: var(--accent-gold);
-        margin-bottom: 0.5rem;
-    }
-
-    .newsletter-meta {
-        font-family: 'Sora', sans-serif;
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-    }
+/* ---------- Warning text ---------- */
+.stAlert > div {
+    border-radius: 10px !important;
+    font-size: 0.9rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ============================================
-# HELPER FUNCTIONS
-# ============================================
+# ========== Session State ==========
+if "processing" not in st.session_state:
+    st.session_state.processing = False
+if "step" not in st.session_state:
+    st.session_state.step = 0
+if "result" not in st.session_state:
+    st.session_state.result = None
+if "error" not in st.session_state:
+    st.session_state.error = None
 
-def get_channels():
-    """Extract channel handles from the Python file."""
-    with open(CHANNELS_FILE) as f:
-        content = f.read()
+# ========== Helper: PDF history ==========
+def get_pdf_history():
+    pdfs = sorted(OUTPUT_DIR.glob("*.pdf"), key=os.path.getmtime, reverse=True)
+    items = []
+    for pdf in pdfs[:20]:
+        stat = pdf.stat()
+        items.append({
+            "name": pdf.name,
+            "path": str(pdf),
+            "size": stat.st_size / 1024,
+            "time": datetime.fromtimestamp(stat.st_mtime),
+        })
+    return items
 
-    match = re.search(r'CHANNELS\s*=\s*\[(.*?)\]', content, re.DOTALL)
-    if not match:
-        return []
-
-    channels_block = match.group(1)
-    handles = re.findall(r'["\'](@[\w]+)["\']', channels_block)
-    return handles
-
-
-def save_channels(channels):
-    """Save channels back to the Python file."""
-    with open(CHANNELS_FILE) as f:
-        content = f.read()
-
-    channels_str = "CHANNELS = [\n"
-    for ch in channels:
-        channels_str += f'    "{ch}",\n'
-    channels_str += "]"
-
-    content = re.sub(
-        r'CHANNELS\s*=\s*\[.*?\]',
-        channels_str,
-        content,
-        flags=re.DOTALL
-    )
-
-    with open(CHANNELS_FILE, "w") as f:
-        f.write(content)
-
-
-def extract_handle_from_url(url_or_handle):
-    """Extract @handle from a YouTube URL or return as-is if already a handle."""
-    text = url_or_handle.strip()
-
-    if text.startswith("@"):
-        return text
-
-    patterns = [
-        r'youtube\.com/@([\w]+)',
-        r'youtube\.com/c/([\w]+)',
-        r'youtube\.com/channel/([\w-]+)',
-        r'youtube\.com/user/([\w]+)',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            handle = match.group(1)
-            if not handle.startswith("@"):
-                handle = "@" + handle
-            return handle
-
-    if text and not text.startswith("http"):
-        return "@" + text if not text.startswith("@") else text
-
-    return None
-
-
-def get_schedule():
-    """Read current schedule from plist."""
-    if PLIST_FILE.exists():
-        with open(PLIST_FILE) as f:
-            content = f.read()
-
-        weekday = 3
-        hour = 7
-
-        weekday_match = re.search(r'<key>Weekday</key>\s*<integer>(\d+)</integer>', content)
-        if weekday_match:
-            weekday = int(weekday_match.group(1))
-
-        hour_match = re.search(r'<key>Hour</key>\s*<integer>(\d+)</integer>', content)
-        if hour_match:
-            hour = int(hour_match.group(1))
-
-        return weekday, hour
-    return 3, 7
-
-
-def save_schedule(weekday, hour):
-    """Save schedule to plist and reload."""
-    if PLIST_FILE.exists():
-        with open(PLIST_FILE) as f:
-            content = f.read()
-
-        content = re.sub(
-            r'(<key>Weekday</key>\s*<integer>)\d+(</integer>)',
-            f'\\g<1>{weekday}\\2',
-            content
-        )
-        content = re.sub(
-            r'(<key>Hour</key>\s*<integer>)\d+(</integer>)',
-            f'\\g<1>{hour}\\2',
-            content
-        )
-
-        with open(PLIST_FILE, "w") as f:
-            f.write(content)
-
-        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(PLIST_FILE)],
-                      capture_output=True)
-        subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(PLIST_FILE)],
-                      capture_output=True)
-        return True
-    return False
-
-
-def get_newsletters():
-    """Get list of saved newsletters."""
-    newsletters = []
-    if NEWSLETTERS_DIR.exists():
-        for json_file in sorted(NEWSLETTERS_DIR.glob("newsletter_*.json"), reverse=True):
-            with open(json_file) as f:
-                data = json.load(f)
-                data["json_path"] = str(json_file)
-                newsletters.append(data)
-    return newsletters
-
-
-# ============================================
-# SIDEBAR NAVIGATION
-# ============================================
-
-with st.sidebar:
-    st.markdown("""
-    <div style="text-align: center; padding: 1rem 0 2rem 0;">
-        <div style="font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; font-weight: 700;
-                    letter-spacing: 0.1em; color: #d4a855;">THE DIGEST</div>
-        <div style="font-family: 'Sora', sans-serif; font-size: 0.7rem; letter-spacing: 0.15em;
-                    text-transform: uppercase; color: #5c5850; margin-top: 0.25rem;">Newsletter Studio</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    page = st.radio(
-        "NAVIGATION",
-        ["Generate", "Channels", "Writing Style", "Archive", "Schedule"],
-        label_visibility="visible"
-    )
-
-# ============================================
-# PAGE: Generate Newsletter
-# ============================================
-if page == "Generate":
-    st.markdown("""
-    <div class="masthead">
-        <h1>THE DIGEST</h1>
-        <div class="tagline">Your personal YouTube newsletter, crafted by AI</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Centered generate button
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col_left, col_center, col_right = st.columns([1, 2, 1])
-
-    with col_center:
-        if st.button("Generate & Send Newsletter", type="primary", use_container_width=True):
-            with st.spinner("Crafting your newsletter..."):
-                try:
-                    # Note: If this fails with ModuleNotFoundError, replace "python3" with your full Python path
-                    # Find it by running: which python3
-                    result = subprocess.run(
-                        ["python3", str(PROJECT_DIR / "main.py")],
-                        capture_output=True,
-                        text=True,
-                        cwd=str(PROJECT_DIR),
-                        timeout=600
-                    )
-
-                    if "Newsletter sent successfully" in result.stdout:
-                        st.success("Newsletter sent! Check your inbox.")
-                    elif "No new videos" in result.stdout:
-                        st.info("No new videos to process. All caught up!")
-                    else:
-                        st.warning("Completed with notes. See log below.")
-
-                    with st.expander("View Output Log"):
-                        st.code(result.stdout + result.stderr, language="text")
-
-                except subprocess.TimeoutExpired:
-                    st.error("Process timed out. Try again.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-        st.caption("Fetches new videos, writes articles with AI, and sends to your inbox")
-
-    # Stats at the bottom
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.divider()
-
-    col1, col2, col3 = st.columns(3)
-
-    if TRACKER_FILE.exists():
-        with open(TRACKER_FILE) as f:
-            data = json.load(f)
-        video_count = len(data.get("videos", {}))
-    else:
-        video_count = 0
-
-    channels = get_channels()
-    weekday, hour = get_schedule()
-    days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-    with col1:
-        st.metric("Articles Sent", video_count)
-
-    with col2:
-        st.metric("Channels", len(channels))
-
-    with col3:
-        st.metric("Next Run", f"{days[weekday]} {hour}:00")
-
-# ============================================
-# PAGE: Channels
-# ============================================
-elif page == "Channels":
-    st.markdown("## Your Channels")
-
-    # Initialize session state for feedback messages
-    if "channel_added" not in st.session_state:
-        st.session_state.channel_added = None
-
-    channels = get_channels()
-
-    # Show success/error message if there is one
-    if st.session_state.channel_added:
-        if st.session_state.channel_added.startswith("✓"):
-            st.success(st.session_state.channel_added)
+# ========== Helper: step display ==========
+def render_steps(current_step):
+    labels = ["📝 Extract", "🌐 Translate", "📄 PDF"]
+    icons = ["", "", ""]
+    html = '<div class="steps">'
+    for i, (label, icon) in enumerate(zip(labels, icons)):
+        if i < current_step:
+            cls = "step-done"
+            badge = "✓"
+        elif i == current_step:
+            cls = "step-active"
+            badge = icon
         else:
-            st.error(st.session_state.channel_added)
-        st.session_state.channel_added = None
+            cls = "step-pending"
+            badge = "○"
+        html += f'<div class="step {cls}">{badge} {label}</div>'
+    html += '</div>'
+    return html
 
-    # Add new channel section
-    st.markdown("#### Add a Channel")
-    st.caption("Paste a YouTube channel URL or @handle, then press Enter or click Add")
+# ========== Pipeline ==========
+def run_pipeline(url):
+    try:
+        # Step 0: Extract
+        st.session_state.step = 0
 
-    # Use a form so Enter key submits
-    with st.form(key="add_channel_form", clear_on_submit=True):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            new_input = st.text_input(
-                "Channel URL or handle",
-                placeholder="https://youtube.com/@channelname or @channelname",
-                label_visibility="collapsed"
+        video_id = extract_video_id(url)
+        if not video_id:
+            raise ValueError(f"Invalid YouTube URL")
+
+        title, channel = get_video_info(video_id)
+
+        transcript = get_transcript(video_id)
+        if not transcript:
+            raise ValueError("No subtitles found. Video may not have subtitles.")
+
+        # Step 1: Translate
+        st.session_state.step = 1
+
+        pairs = translate_transcript(transcript, title, channel)
+        if not pairs:
+            raise ValueError("Translation failed.")
+
+        # Step 2: Generate PDF
+        st.session_state.step = 2
+
+        pdf_path = generate_pdf(pairs, title, channel)
+
+        st.session_state.result = {
+            "title": title,
+            "channel": channel,
+            "word_count": len(transcript.split()),
+            "pair_count": len(pairs),
+            "pdf_path": pdf_path,
+        }
+        st.session_state.processing = False
+        st.rerun()
+
+    except Exception as e:
+        st.session_state.error = str(e)
+        st.session_state.processing = False
+        st.rerun()
+
+# ========== Process if needed ==========
+if st.session_state.processing:
+    st.markdown("""
+    <div class="progress-card">
+        <div class="progress-title">Processing your video...</div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(render_steps(st.session_state.step), unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    run_pipeline(st.session_state.get("url", ""))
+
+# ========== Hero ==========
+st.markdown("""
+<div class="hero">
+    <div class="hero-icon">📚</div>
+    <h1>YouTube English Learner</h1>
+    <p>Paste a YouTube link → Get a bilingual PDF for note-taking</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ========== Input Card ==========
+st.markdown('<div class="input-card">', unsafe_allow_html=True)
+
+col_input, col_btn = st.columns([5, 1.2])
+
+with col_input:
+    url = st.text_input(
+        "YouTube URL",
+        placeholder="https://www.youtube.com/watch?v=...",
+        label_visibility="collapsed",
+    )
+
+with col_btn:
+    generate_clicked = st.button(
+        "⚡ Generate",
+        type="primary",
+        use_container_width=True,
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+if generate_clicked:
+    if not url.strip():
+        st.warning("Please paste a YouTube URL first.")
+    else:
+        st.session_state.url = url.strip()
+        st.session_state.processing = True
+        st.session_state.result = None
+        st.session_state.error = None
+        st.session_state.step = 0
+        st.rerun()
+
+# ========== Error ==========
+if st.session_state.error:
+    st.markdown(f'<div class="error-card">⚠️ {st.session_state.error}</div>', unsafe_allow_html=True)
+    st.session_state.error = None
+
+# ========== Result ==========
+if st.session_state.result:
+    r = st.session_state.result
+    pdf_name = os.path.basename(r["pdf_path"])
+
+    st.markdown(f"""
+    <div class="result-card">
+        <div class="result-title">✅ {r['title']}</div>
+        <div class="result-channel">{r['channel']}</div>
+        <div class="stats-row">
+            <div class="stat-box">
+                <div class="stat-value">{r['word_count']:,}</div>
+                <div class="stat-label">Words</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">{r['pair_count']:,}</div>
+                <div class="stat-label">Sentences</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">{os.path.getsize(r['pdf_path']) / 1024:.0f}</div>
+                <div class="stat-label">KB</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if os.path.exists(r["pdf_path"]):
+        with open(r["pdf_path"], "rb") as f:
+            st.download_button(
+                "📥  Download PDF",
+                data=f,
+                file_name=pdf_name,
+                mime="application/pdf",
+                use_container_width=True,
             )
-        with col2:
-            add_clicked = st.form_submit_button("Add", type="primary", use_container_width=True)
 
-    if add_clicked and new_input:
-        handle = extract_handle_from_url(new_input)
-        if handle:
-            if handle not in channels:
-                channels.append(handle)
-                save_channels(channels)
-                st.session_state.channel_added = f"✓ Added {handle}"
-                st.rerun()
-            else:
-                st.session_state.channel_added = f"Channel {handle} is already in your list"
-                st.rerun()
-        else:
-            st.session_state.channel_added = "Could not parse that URL. Try pasting the full YouTube channel URL."
-            st.rerun()
+# ========== History ==========
+history = get_pdf_history()
 
-    st.divider()
+st.markdown('<div class="history-header">📁  Generated PDFs</div>', unsafe_allow_html=True)
 
-    # Display current channels
-    st.markdown(f"#### Your Channels ({len(channels)})")
-
-    if channels:
-        for i, channel in enumerate(channels):
-            col1, col2 = st.columns([6, 1])
-            with col1:
-                st.markdown(f"""
-                <div style="
-                    background: #1e1e1e;
-                    border: 1px solid #2a2a2a;
-                    border-radius: 8px;
-                    padding: 0.75rem 1rem;
-                    font-family: 'JetBrains Mono', monospace;
-                    font-size: 0.95rem;
-                    color: #e8e4dd;
-                ">{channel}</div>
-                """, unsafe_allow_html=True)
-            with col2:
-                if st.button("Remove", key=f"del_{i}", type="secondary"):
-                    channels.pop(i)
-                    save_channels(channels)
-                    st.session_state.channel_added = f"✓ Removed {channel}"
-                    st.rerun()
-    else:
-        st.info("No channels yet. Add your first channel above!")
-
-# ============================================
-# PAGE: Writing Style
-# ============================================
-elif page == "Writing Style":
-    st.markdown("## Writing Style")
-    st.write("Customize how Claude AI writes your articles.")
-
-    with open(PROMPT_FILE) as f:
-        content = f.read()
-
-    match = re.search(r'prompt = f"""(.+?)"""', content, re.DOTALL)
-
-    if match:
-        current_prompt = match.group(1)
-
-        new_prompt = st.text_area(
-            "Article prompt",
-            value=current_prompt,
-            height=450,
-            label_visibility="collapsed"
-        )
-
-        if st.button("Save Changes", type="primary"):
-            new_content = content[:match.start(1)] + new_prompt + content[match.end(1):]
-            with open(PROMPT_FILE, "w") as f:
-                f.write(new_content)
-            st.success("Writing style saved!")
-
-# ============================================
-# PAGE: Archive
-# ============================================
-elif page == "Archive":
-    st.markdown("## Archive")
-
-    # Tabs for newsletters vs individual videos
-    tab1, tab2 = st.tabs(["Newsletters", "Processed Videos"])
-
-    with tab1:
-        newsletters = get_newsletters()
-
-        if newsletters:
-            st.markdown(f"**{len(newsletters)} newsletters sent**")
-
-            for nl in newsletters:
-                st.markdown(f"""
-                <div class="newsletter-card">
-                    <div class="newsletter-date">{nl.get('date', 'Unknown date')}</div>
-                    <div class="newsletter-meta">
-                        {nl.get('article_count', 0)} articles from {', '.join(nl.get('channels', [])[:3])}{'...' if len(nl.get('channels', [])) > 3 else ''}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    html_file = NEWSLETTERS_DIR / nl.get('html_file', '')
-                    if html_file.exists():
-                        with open(html_file) as f:
-                            html_content = f.read()
-                        st.download_button(
-                            "Download HTML",
-                            html_content,
-                            file_name=nl.get('html_file', 'newsletter.html'),
-                            mime="text/html",
-                            key=f"html_{nl.get('timestamp')}"
-                        )
-                with col2:
-                    epub_file = NEWSLETTERS_DIR / nl.get('epub_file', '')
-                    if epub_file.exists():
-                        with open(epub_file, "rb") as f:
-                            epub_content = f.read()
-                        st.download_button(
-                            "Download EPUB",
-                            epub_content,
-                            file_name=nl.get('epub_file', 'newsletter.epub'),
-                            mime="application/epub+zip",
-                            key=f"epub_{nl.get('timestamp')}"
-                        )
-
-                st.markdown("---")
-        else:
-            st.info("No newsletters yet. Generate your first one from the Generate tab!")
-
-    with tab2:
-        if TRACKER_FILE.exists():
-            with open(TRACKER_FILE) as f:
-                data = json.load(f)
-
-            videos = data.get("videos", {})
-
-            if videos:
-                sorted_videos = sorted(
-                    videos.items(),
-                    key=lambda x: x[1].get("processed_at", ""),
-                    reverse=True
-                )
-
-                st.markdown(f"**{len(videos)} videos processed**")
-
-                for video_id, info in sorted_videos:
-                    with st.expander(f"{info.get('channel', 'Unknown')} — {info.get('title', 'Unknown')[:50]}..."):
-                        st.write(f"**{info.get('title', 'Unknown')}**")
-                        st.caption(f"From {info.get('channel', 'Unknown')}")
-
-                        processed = info.get('processed_at', 'Unknown')
-                        if processed != 'Unknown':
-                            try:
-                                dt = datetime.fromisoformat(processed)
-                                processed = dt.strftime("%B %d, %Y at %I:%M %p")
-                            except:
-                                pass
-                        st.caption(f"Processed: {processed}")
-
-                        st.markdown(f"[Watch on YouTube](https://www.youtube.com/watch?v={video_id})")
-
-                st.divider()
-
-                if st.button("Clear All History", type="secondary"):
-                    st.warning("This will allow all videos to be re-processed.")
-            else:
-                st.info("No videos processed yet.")
-        else:
-            st.info("No videos processed yet.")
-
-# ============================================
-# PAGE: Schedule
-# ============================================
-elif page == "Schedule":
-    st.markdown("## Schedule")
-    st.write("Set when your newsletter runs automatically.")
-
-    weekday, hour = get_schedule()
-    days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        new_day = st.selectbox(
-            "Day",
-            options=list(range(7)),
-            format_func=lambda x: days[x],
-            index=weekday
-        )
-
-    with col2:
-        new_hour = st.selectbox(
-            "Time",
-            options=list(range(24)),
-            format_func=lambda x: f"{x:02d}:00" + (" AM" if x < 12 else " PM"),
-            index=hour
-        )
-
-    st.markdown(f"**Currently scheduled:** {days[weekday]} at {hour:02d}:00")
-
-    if new_day != weekday or new_hour != hour:
-        st.markdown(f"**New schedule:** {days[new_day]} at {new_hour:02d}:00")
-
-        if st.button("Update Schedule", type="primary"):
-            if save_schedule(new_day, new_hour):
-                st.success(f"Updated to {days[new_day]} at {new_hour:02d}:00!")
-            else:
-                st.error("Couldn't update schedule")
-
-    st.divider()
-
-    st.caption("Your Mac must be awake at the scheduled time for the newsletter to run automatically.")
-
-# ============================================
-# Footer
-# ============================================
-st.markdown("---")
-st.caption("The Digest • Powered by Claude AI")
+if history:
+    for item in history:
+        time_str = item["time"].strftime("%m/%d %H:%M")
+        st.markdown(f"""
+        <div class="history-item">
+            <div class="history-icon">📄</div>
+            <div class="history-info">
+                <div class="history-name">{item['name']}</div>
+                <div class="history-meta">{time_str}  ·  {item['size']:.0f} KB</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.markdown('<div class="history-empty">No PDFs yet — paste a link above to get started!</div>', unsafe_allow_html=True)

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=380">
+  <title>YouTube English Learner</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="logo">📚</span>
+    <h1>YouTube English Learner</h1>
+  </div>
+
+  <!-- Input -->
+  <div class="input-group">
+    <input type="text" id="url-input" placeholder="Paste a YouTube URL...">
+    <button id="detect-btn" title="Use current tab">🔗</button>
+  </div>
+
+  <button id="generate-btn" class="btn-primary">
+    ⚡ Generate PDF
+  </button>
+
+  <!-- Status -->
+  <div id="status" class="status hidden">
+    <div class="status-icon" id="status-icon"></div>
+    <div class="status-text" id="status-text"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result" class="result hidden">
+    <div class="result-title" id="result-title"></div>
+    <div class="result-meta" id="result-meta"></div>
+    <button id="download-btn" class="btn-download">
+      📥 Download PDF
+    </button>
+  </div>
+
+  <!-- History -->
+  <div class="section-header">
+    <span>📁 History</span>
+  </div>
+  <div id="history" class="history"></div>
+
+  <!-- Settings (collapsed) -->
+  <div class="section-header" style="cursor:pointer" id="settings-toggle">
+    <span>⚙️ Settings</span>
+  </div>
+  <div id="settings" class="settings hidden">
+    <label class="setting-label">Backend URL</label>
+    <div class="setting-row">
+      <input type="text" id="api-url-input" placeholder="https://your-app.up.railway.app">
+      <button id="save-api-btn" class="btn-save">Save</button>
+    </div>
+    <div id="api-status" class="api-status"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

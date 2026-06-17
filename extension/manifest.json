@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube English Learner",
+  "version": "1.0.0",
+  "description": "Extract YouTube subtitles into bilingual PDF for English learning",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["*://*/*"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "YouTube English Learner"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/watch*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {}
+}

@@ -1,75 +1,103 @@
 """
-YouTube Newsletter Generator - Main Script
-Ties together all the pieces: fetch videos → get transcripts → write articles → send email
-Tracks processed videos to avoid sending duplicates.
+YouTube English Learning PDF Generator
+Extract subtitles -> Translate to bilingual -> Generate PDF
+
+Usage:
+    python main.py <YouTube_URL>
+    python main.py   (interactive - will prompt for URL)
 """
 
-from get_videos import main as fetch_videos
-from get_transcripts import get_transcripts_for_videos
-from write_articles import write_articles_for_videos
-from send_email import send_newsletter
-from video_tracker import filter_new_videos, mark_videos_processed, get_processed_count
+import re
+import sys
+import requests
+import os
+from dotenv import load_dotenv
+
+from get_transcripts import get_transcript
+from translate import translate_transcript
+from generate_pdf import generate_pdf
+
+load_dotenv()
 
 
-def run():
-    """
-    Run the full newsletter pipeline.
-    """
-    print("=" * 60)
-    print("  YOUTUBE NEWSLETTER GENERATOR")
-    print("=" * 60)
-    print(f"  Previously processed: {get_processed_count()} videos")
+def extract_video_id(url):
+    """Extract video ID from various YouTube URL formats."""
+    patterns = [
+        r"(?:v=|/v/|youtu\.be/)([a-zA-Z0-9_-]{11})",
+        r"^([a-zA-Z0-9_-]{11})$",
+    ]
+    for p in patterns:
+        m = re.search(p, url)
+        if m:
+            return m.group(1)
+    return None
 
-    # Step 1: Fetch latest videos from your channels
-    print("\n📺 STEP 1: Fetching latest videos...\n")
-    videos = fetch_videos()
 
-    if not videos:
-        print("No videos found. Check your channel list.")
-        return
+def get_video_info(video_id):
+    """Get video title and channel from YouTube oEmbed API."""
+    try:
+        resp = requests.get(
+            f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json",
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("title", "Unknown"), data.get("author_name", "Unknown")
+    except Exception:
+        pass
+    return "Unknown", "Unknown"
 
-    # Step 1b: Filter out already-processed videos
-    print("\n🔍 Checking for new videos...\n")
-    new_videos = filter_new_videos(videos)
 
-    if not new_videos:
-        print("No new videos to process. All videos have been sent before.")
-        print("=" * 60)
-        return
+def run(url):
+    """Full pipeline: URL -> bilingual PDF."""
+    print("=" * 50)
+    print("  YouTube English Learning PDF Generator")
+    print("=" * 50)
 
-    print(f"\n  → {len(new_videos)} new video(s) to process\n")
+    # Parse URL
+    video_id = extract_video_id(url)
+    if not video_id:
+        print(f"Invalid YouTube URL: {url}")
+        return None
 
-    # Step 2: Get transcripts for those videos
-    print("\n📝 STEP 2: Extracting transcripts...\n")
-    videos_with_transcripts = get_transcripts_for_videos(new_videos)
+    # Get video info
+    print(f"\n[1/3] Getting video info...")
+    title, channel = get_video_info(video_id)
+    print(f"  Title:   {title}")
+    print(f"  Channel: {channel}")
 
-    if not videos_with_transcripts:
-        print("No transcripts available for any videos.")
-        return
+    # Get transcript
+    print(f"\n[2/3] Extracting transcript...")
+    transcript = get_transcript(video_id)
+    if not transcript:
+        print("  Failed to get transcript. The video may not have subtitles.")
+        return None
+    print(f"  Got {len(transcript.split())} words")
 
-    # Step 3: Generate articles using Claude AI
-    print("\n✍️ STEP 3: Writing articles with Claude AI...\n")
-    articles = write_articles_for_videos(videos_with_transcripts)
+    # Translate
+    print(f"\n[3/3] Translating to bilingual format...")
+    pairs = translate_transcript(transcript, title, channel)
+    if not pairs:
+        print("  Translation failed.")
+        return None
+    print(f"  Generated {len(pairs)} bilingual pairs")
 
-    if not articles:
-        print("No articles generated.")
-        return
+    # Generate PDF
+    print(f"\nGenerating PDF...")
+    pdf_path = generate_pdf(pairs, title, channel)
+    print(f"\n{'=' * 50}")
+    print(f"  Done! PDF saved to:")
+    print(f"  {pdf_path}")
+    print(f"{'=' * 50}")
 
-    # Step 4: Send the newsletter via email
-    print("\n📧 STEP 4: Sending newsletter...\n")
-    success = send_newsletter(articles)
-
-    # Step 5: Mark videos as processed (only if email sent successfully)
-    if success:
-        mark_videos_processed(videos_with_transcripts)
-        print(f"\n  ✓ Marked {len(videos_with_transcripts)} video(s) as processed")
-
-    print("\n" + "=" * 60)
-    print("  DONE!")
-    print("=" * 60)
-
-    return articles
+    return pdf_path
 
 
 if __name__ == "__main__":
-    run()
+    if len(sys.argv) > 1:
+        url = sys.argv[1]
+    else:
+        url = input("Enter YouTube URL: ").strip()
+
+    if url:
+        run(url)
