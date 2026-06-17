@@ -38,7 +38,13 @@
       try {
         chrome.runtime.sendMessage(msg, (response) => {
           if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
+            const err = chrome.runtime.lastError.message;
+            if (err.includes("invalidated")) {
+              setProgress(100, "Please refresh this page");
+              btn.style.background = "#f59e0b";
+              doneTimer = setTimeout(resetBtn, 3000);
+            }
+            reject(new Error(err));
           } else {
             resolve(response);
           }
