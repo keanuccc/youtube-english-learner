@@ -7,9 +7,11 @@
   z-index: 9999;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
+  width: 200px;
+  height: 48px;
+  background: #1a1a1a;
   color: #fff;
   font-family: 'Segoe UI', -apple-system, sans-serif;
   font-size: 14px;
@@ -17,21 +19,35 @@
   border: none;
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(234, 179, 8, 0.35);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   transition: transform 0.2s, box-shadow 0.2s;
   letter-spacing: 0.02em;
+  overflow: hidden;
 }
 #yt-english-learner-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 28px rgba(234, 179, 8, 0.45);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
 }
 #yt-english-learner-btn:active {
   transform: translateY(0);
 }
-#yt-english-learner-btn .icon {
-  font-size: 18px;
-}
 #yt-english-learner-btn.loading {
-  opacity: 0.7;
   pointer-events: none;
+}
+
+/* Progress bar background */
+#yt-english-learner-btn .progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #eab308, #d97706);
+  border-radius: 999px;
+  transition: width 0.6s ease;
+  z-index: 0;
+}
+#yt-english-learner-btn .btn-text {
+  position: relative;
+  z-index: 1;
 }
