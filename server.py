@@ -40,17 +40,28 @@ def generate():
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
+        print(f"[DEBUG] Starting PDF generation for: {url}")
+        print(f"[DEBUG] Video ID: {video_id}")
+
         title, channel = get_video_info(video_id)
+        print(f"[DEBUG] Video info - Title: {title}, Channel: {channel}")
 
         transcript = get_transcript(video_id)
         if not transcript:
+            print("[ERROR] No subtitles found")
             return jsonify({"error": "No subtitles found for this video"}), 404
+
+        print(f"[DEBUG] Transcript length: {len(transcript)} chars")
 
         pairs = translate_transcript(transcript, title, channel)
         if not pairs:
+            print("[ERROR] Translation failed")
             return jsonify({"error": "Translation failed"}), 500
 
+        print(f"[DEBUG] Generated {len(pairs)} sentence pairs")
+
         pdf_path = generate_pdf(pairs, title, channel)
+        print(f"[DEBUG] PDF generated: {pdf_path}")
 
         return jsonify({
             "title": title,
@@ -61,6 +72,9 @@ def generate():
         })
 
     except Exception as e:
+        print(f"[ERROR] Exception in generate: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

@@ -19,22 +19,53 @@ def get_font_paths():
             return {"simhei": simhei, "simsun": simsun}
 
     elif system == "Linux":
-        # Try common Linux font locations
+        # Try common Linux font locations (after install_fonts.sh runs)
         linux_font_dirs = [
             "/usr/share/fonts/truetype/wqy",
             "/usr/share/fonts/truetype/noto",
             "/usr/share/fonts/opentype/noto",
             "/usr/share/fonts/truetype/dejavu",
+            "/usr/share/fonts",
         ]
 
+        # Look for WenQuanYi Micro Hei (most common Chinese font on Linux)
         for font_dir in linux_font_dirs:
-            if os.path.exists(font_dir):
-                for font_file in os.listdir(font_dir):
-                    if "wqy" in font_file.lower() or "microhei" in font_file.lower():
-                        path = os.path.join(font_dir, font_file)
+            if not os.path.exists(font_dir):
+                continue
+
+            # Walk through subdirectories
+            for root, dirs, files in os.walk(font_dir):
+                for font_file in files:
+                    font_lower = font_file.lower()
+                    # Look for WenQuanYi Micro Hei specifically
+                    if "wqy-microhei" in font_lower or "wqy_microhei" in font_lower:
+                        path = os.path.join(root, font_file)
+                        print(f"Found Chinese font: {path}")
+                        return {"simhei": path, "simsun": path}
+                    # Also try WenQuanYi Zen Hei
+                    elif "wqy-zenhei" in font_lower or "wqy_zenhei" in font_lower:
+                        path = os.path.join(root, font_file)
+                        print(f"Found Chinese font: {path}")
+                        return {"simhei": path, "simsun": path}
+                    # Try Noto Sans CJK
+                    elif "noto" in font_lower and "cjk" in font_lower and font_file.endswith(".ttf"):
+                        path = os.path.join(root, font_file)
+                        print(f"Found Chinese font: {path}")
+                        return {"simhei": path, "simsun": path}
+
+        # If no Chinese font found, try to find any TTF font
+        for font_dir in linux_font_dirs:
+            if not os.path.exists(font_dir):
+                continue
+            for root, dirs, files in os.walk(font_dir):
+                for font_file in files:
+                    if font_file.endswith(".ttf"):
+                        path = os.path.join(root, font_file)
+                        print(f"Using fallback font: {path}")
                         return {"simhei": path, "simsun": path}
 
     # Last resort: None (will use Helvetica)
+    print("No Chinese fonts found on system")
     return {"simhei": None, "simsun": None}
 
 
@@ -84,12 +115,18 @@ def generate_pdf(pairs, title, channel, output_dir="output"):
     Returns:
         path to the generated PDF
     """
+    print(f"[DEBUG] Generating PDF with {len(pairs)} pairs")
+    print(f"[DEBUG] Title: {title}")
+    print(f"[DEBUG] Channel: {channel}")
+
     os.makedirs(output_dir, exist_ok=True)
 
     safe_name = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:50].strip()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_name}_{timestamp}.pdf"
     filepath = os.path.join(output_dir, filename)
+
+    print(f"[DEBUG] Output path: {filepath}")
 
     pdf = BilingualPDF()
     pdf.add_page()
