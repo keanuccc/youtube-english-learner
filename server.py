@@ -15,6 +15,7 @@ from get_transcripts import get_transcript
 from translate import translate_transcript
 from generate_pdf import generate_pdf
 from main import extract_video_id, get_video_info
+from upload_baidu import upload_async, is_bypy_authorized
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -25,7 +26,10 @@ CORS(app)
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok",
+        "baidu_authorized": is_bypy_authorized(),
+    })
 
 
 @app.route("/api/generate", methods=["POST"])
@@ -68,6 +72,15 @@ def generate():
         test_pdf = BilingualPDF()
         has_chinese = test_pdf.has_chinese_font
 
+        # Auto-upload to Baidu Pan if authorized
+        baidu_uploaded = False
+        if is_bypy_authorized():
+            print("[DEBUG] Baidu Pan authorized, uploading...")
+            upload_async(pdf_path)
+            baidu_uploaded = True
+        else:
+            print("[DEBUG] Baidu Pan not authorized, skipping upload")
+
         return jsonify({
             "title": title,
             "channel": channel,
@@ -75,6 +88,7 @@ def generate():
             "pair_count": len(pairs),
             "pdf": os.path.basename(pdf_path),
             "has_chinese_translation": has_chinese,
+            "baidu_uploaded": baidu_uploaded,
         })
 
     except Exception as e:
