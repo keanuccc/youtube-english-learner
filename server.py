@@ -63,12 +63,18 @@ def generate():
         pdf_path = generate_pdf(pairs, title, channel)
         print(f"[DEBUG] PDF generated: {pdf_path}")
 
+        # Check if Chinese font was available
+        from generate_pdf import BilingualPDF
+        test_pdf = BilingualPDF()
+        has_chinese = test_pdf.has_chinese_font
+
         return jsonify({
             "title": title,
             "channel": channel,
             "word_count": len(transcript.split()),
             "pair_count": len(pairs),
             "pdf": os.path.basename(pdf_path),
+            "has_chinese_translation": has_chinese,
         })
 
     except Exception as e:

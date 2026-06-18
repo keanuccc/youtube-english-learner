@@ -208,14 +208,16 @@ def generate_pdf(pairs, title, channel, output_dir="output"):
         pdf.set_x(margin)
         pdf.multi_cell(content_w, 7, en)
 
-        # Blank space for note-taking (~10mm)
-        pdf.ln(5)
+        # Only show Chinese translation if Chinese font is available
+        if pdf.has_chinese_font:
+            # Blank space for note-taking (~10mm)
+            pdf.ln(5)
 
-        # Chinese translation - 11pt gray
-        pdf.set_font(body_font, "", 11)
-        pdf.set_text_color(100, 100, 100)
-        pdf.set_x(margin)
-        pdf.multi_cell(content_w, 6, cn)
+            # Chinese translation - 11pt gray
+            pdf.set_font(body_font, "", 11)
+            pdf.set_text_color(100, 100, 100)
+            pdf.set_x(margin)
+            pdf.multi_cell(content_w, 6, cn)
 
         # Trailing space before next pair
         pdf.ln(8)
