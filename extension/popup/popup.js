@@ -1,5 +1,5 @@
-// Default API - local development
-const DEFAULT_API = "http://localhost:5000";
+// Default API - Railway production
+const DEFAULT_API = "https://web-production-e7326.up.railway.app";
 
 let API = DEFAULT_API;
 

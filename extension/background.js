@@ -3,7 +3,7 @@
  * All API calls go through here to avoid CORS issues from content scripts
  */
 
-const DEFAULT_API = "http://localhost:5000";
+const DEFAULT_API = "https://web-production-e7326.up.railway.app";
 
 function getApiUrl() {
   return new Promise((resolve) => {
@@ -11,6 +11,24 @@ function getApiUrl() {
       resolve(result.apiUrl || DEFAULT_API);
     });
   });
+}
+
+// Keep-alive mechanism for long-running requests
+let keepAliveInterval = null;
+
+function startKeepAlive() {
+  if (keepAliveInterval) return;
+  keepAliveInterval = setInterval(() => {
+    // Send a message to keep the service worker alive
+    chrome.runtime.getPlatformInfo(() => {});
+  }, 20000); // Every 20 seconds
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -26,16 +44,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Generate PDF
   if (msg.action === "generate") {
+    startKeepAlive(); // Keep service worker alive during long request
     getApiUrl().then((base) => {
       fetch(`${base}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: msg.url }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(180000), // Extended to 3 minutes
       })
-        .then((r) => r.json().then((data) => sendResponse({ ok: r.ok, data })))
-        .catch((e) => sendResponse({ ok: false, data: { error: e.message } }));
-    }).catch((e) => sendResponse({ ok: false, data: { error: e.message } }));
+        .then((r) => {
+          stopKeepAlive();
+          return r.json().then((data) => sendResponse({ ok: r.ok, data }));
+        })
+        .catch((e) => {
+          stopKeepAlive();
+          sendResponse({ ok: false, data: { error: e.message } });
+        });
+    }).catch((e) => {
+      stopKeepAlive();
+      sendResponse({ ok: false, data: { error: e.message } });
+    });
     return true;
   }
 

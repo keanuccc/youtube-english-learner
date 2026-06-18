@@ -66,6 +66,7 @@
       [40,  "Translating...",          8000],
       [70,  "Still translating...",    16000],
       [85,  "Generating PDF...",       24000],
+      [90,  "Almost done...",          32000],
     ];
     const timers = stages.map(([pct, label, delay]) =>
       setTimeout(() => setProgress(pct, label), delay)
@@ -76,7 +77,7 @@
       const health = await sendMessage({ action: "health" });
       if (!health || !health.ok) throw new Error("offline");
 
-      // Generate PDF
+      // Generate PDF - keep this tab active
       const result = await sendMessage({ action: "generate", url });
 
       timers.forEach(clearTimeout);
@@ -101,7 +102,16 @@
     } catch (e) {
       timers.forEach(clearTimeout);
       console.error("YT English Learner error:", e);
-      setProgress(100, "Backend offline");
+
+      // Provide more specific error message
+      let errorMsg = "Backend offline";
+      if (e.message.includes("aborted") || e.message.includes("timeout")) {
+        errorMsg = "Request timeout - try again";
+      } else if (e.message.includes("network")) {
+        errorMsg = "Network error";
+      }
+
+      setProgress(100, errorMsg);
       btn.style.background = "#dc2626";
       doneTimer = setTimeout(resetBtn, 4000);
     }
