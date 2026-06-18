@@ -12,5 +12,5 @@ __pycache__/
 # System files
 .DS_Store
 
-# Downloaded fonts
-fonts/
+# Downloaded fonts (not ignored - wqy-microhei.ttf needed for Railway)
+# fonts/

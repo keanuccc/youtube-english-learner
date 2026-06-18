@@ -36,6 +36,13 @@ def strip_emojis(text):
 
 def get_font_paths():
     """Get font paths based on operating system."""
+    # First check local fonts/ directory (works on all platforms, including Railway)
+    local_font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+    local_font = os.path.join(local_font_dir, "wqy-microhei.ttf")
+    if os.path.exists(local_font):
+        print(f"Found local Chinese font: {local_font}")
+        return {"simhei": local_font, "simsun": local_font}
+
     system = platform.system()
 
     if system == "Windows":
