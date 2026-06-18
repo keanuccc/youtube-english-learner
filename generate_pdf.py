@@ -2,8 +2,36 @@
 
 import os
 import platform
+import re
 from datetime import datetime
 from fpdf import FPDF
+
+
+def strip_emojis(text):
+    """Remove emojis and special Unicode characters that Helvetica can't handle."""
+    # Remove emojis (Unicode range for emojis)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001f926-\U0001f937"
+        "\U00010000-\U0010ffff"
+        "♀-♂"
+        "☀-⭕"
+        "‍"
+        "⏏"
+        "⏩"
+        "⌚"
+        "️"
+        "〰"
+        "]+",
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub(r'', text).strip()
 
 
 def get_font_paths():
@@ -116,8 +144,12 @@ def generate_pdf(pairs, title, channel, output_dir="output"):
         path to the generated PDF
     """
     print(f"[DEBUG] Generating PDF with {len(pairs)} pairs")
-    print(f"[DEBUG] Title: {title}")
-    print(f"[DEBUG] Channel: {channel}")
+
+    # Strip emojis from title and channel for PDF compatibility
+    title = strip_emojis(title)
+    channel = strip_emojis(channel)
+    print(f"[DEBUG] Cleaned title: {title}")
+    print(f"[DEBUG] Cleaned channel: {channel}")
 
     os.makedirs(output_dir, exist_ok=True)
 
