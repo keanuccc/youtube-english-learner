@@ -5,7 +5,7 @@ import platform
 from datetime import datetime
 from fpdf import FPDF
 
-# Cross-platform font configuration
+
 def get_font_paths():
     """Get font paths based on operating system."""
     system = platform.system()
@@ -13,12 +13,13 @@ def get_font_paths():
     if system == "Windows":
         # Windows fonts
         font_dir = "C:/Windows/fonts"
-        return {
-            "simhei": os.path.join(font_dir, "simhei.ttf"),
-            "simsun": os.path.join(font_dir, "simsun.ttc"),
-        }
+        simhei = os.path.join(font_dir, "simhei.ttf")
+        simsun = os.path.join(font_dir, "simsun.ttc")
+        if os.path.exists(simhei):
+            return {"simhei": simhei, "simsun": simsun}
+
     elif system == "Linux":
-        # Linux fonts (common locations)
+        # Try common Linux font locations
         linux_font_dirs = [
             "/usr/share/fonts/truetype/wqy",
             "/usr/share/fonts/truetype/noto",
@@ -26,37 +27,15 @@ def get_font_paths():
             "/usr/share/fonts/truetype/dejavu",
         ]
 
-        # Try to find Chinese fonts
         for font_dir in linux_font_dirs:
             if os.path.exists(font_dir):
-                # Look for WenQuanYi or Noto fonts
                 for font_file in os.listdir(font_dir):
                     if "wqy" in font_file.lower() or "microhei" in font_file.lower():
-                        return {
-                            "simhei": os.path.join(font_dir, font_file),
-                            "simsun": os.path.join(font_dir, font_file),
-                        }
-                    elif "noto" in font_file.lower() and "cjk" in font_file.lower():
-                        return {
-                            "simhei": os.path.join(font_dir, font_file),
-                            "simsun": os.path.join(font_dir, font_file),
-                        }
+                        path = os.path.join(font_dir, font_file)
+                        return {"simhei": path, "simsun": path}
 
-        # Fallback: try to use any available TTF font
-        for font_dir in linux_font_dirs:
-            if os.path.exists(font_dir):
-                for font_file in os.listdir(font_dir):
-                    if font_file.endswith(".ttf"):
-                        return {
-                            "simhei": os.path.join(font_dir, font_file),
-                            "simsun": os.path.join(font_dir, font_file),
-                        }
-
-        # Last resort: use built-in Helvetica (no Chinese support)
-        return {"simhei": None, "simsun": None}
-    else:
-        # macOS or other
-        return {"simhei": None, "simsun": None}
+    # Last resort: None (will use Helvetica)
+    return {"simhei": None, "simsun": None}
 
 
 class BilingualPDF(FPDF):
@@ -70,17 +49,18 @@ class BilingualPDF(FPDF):
         font_paths = get_font_paths()
         self.has_chinese_font = False
 
-        if font_paths["simhei"] and os.path.exists(font_paths["simhei"]):
+        # Try to load Chinese fonts
+        if font_paths.get("simhei") and os.path.exists(font_paths["simhei"]):
             try:
                 self.add_font("simhei", "", font_paths["simhei"])
                 self.add_font("simsun", "", font_paths["simsun"])
                 self.has_chinese_font = True
+                print(f"Loaded Chinese fonts from: {font_paths['simhei']}")
             except Exception as e:
-                print(f"Warning: Could not load Chinese font: {e}")
-                self.has_chinese_font = False
+                print(f"Warning: Could not load Chinese fonts: {e}")
 
         if not self.has_chinese_font:
-            print("Warning: Chinese font not found, using built-in Helvetica")
+            print("Warning: Chinese fonts not available, using built-in Helvetica")
 
     def footer(self):
         self.set_y(-15)
