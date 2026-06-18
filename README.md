@@ -5,6 +5,9 @@
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-yellow.svg)](extension/)
 
 将 YouTube 视频字幕提取为中英双语 PDF，方便做笔记学英语。
+便捷交互形式：通过安装为浏览器扩展的方式，点击扩展之后，自动将整理好的PDF下载到百度网盘，我就能在ipad上直接做笔记。
+
+![使用演示](image/123.png)
 
 ## ✨ 功能特点
 
@@ -249,7 +252,7 @@ CMD ["gunicorn", "--bind", "0.0.0.0:5000", "server:app"]
 如有问题或建议，请通过以下方式联系：
 
 - 提交 [Issue](https://github.com/yourusername/youtube-english-learner/issues)
-- 发送邮件至 your-email@example.com
+- 发送邮件至 2245269601@qq.com
 
 ---
 
